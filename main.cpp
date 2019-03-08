@@ -7,6 +7,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <math.h>
+#include <thread>
 using namespace std;
 string decToBinary(int n)
 {
@@ -58,7 +59,7 @@ vector <vector<int > > randomFieldGenerator(int N){
   }
   return field;
 }
-double calcEnergy(vector<vector<int > > field,int Lx,int Ly, double J = 1 ){
+double calcEnergy(vector<vector<int > > &field,int Lx,int Ly, double J = 1 ){
   double energy  = 0.0;
   for (int i =0; i<Lx; i++){
     for(int j = 0 ; j<Ly ;j++){
@@ -70,7 +71,7 @@ double calcEnergy(vector<vector<int > > field,int Lx,int Ly, double J = 1 ){
   }
   return energy*J;
 }
-double calcMag(vector<vector<int > > field){
+double calcMag(vector<vector<int > > &field){
   double M = 0.0;
   int N = field.size();
   for (int i=0;i<N;i++){
@@ -81,7 +82,7 @@ double calcMag(vector<vector<int > > field){
   }
   return pow((M/(N*N)),2);
 }
-double deltaE(vector<vector<int > > field, int x, int y, double J = 1){
+double deltaE(vector<vector<int > > &field, int x, int y, double J = 1){
   int S = field[x][y];
   int N = field.size();
   int neighbor = field[(x+1)%N][y] + field[x][(y+1)%N]+
@@ -89,7 +90,7 @@ double deltaE(vector<vector<int > > field, int x, int y, double J = 1){
   return 2*S*J*neighbor;
 }
 
-std::vector<std::vector<int> > mcmc(vector<vector<int > > field , double beta){
+void mcmc( vector<vector<int > > &field , double beta_J){
   std::random_device rd;
   std::mt19937 mt(rd());
   int N = field.size();
@@ -100,7 +101,7 @@ std::vector<std::vector<int> > mcmc(vector<vector<int > > field , double beta){
     std::uniform_real_distribution<double> dist(0.0, 1.0);
     double u = dist(mt);
     double cost = deltaE(field,x,y);
-    double probability = exp(-beta * cost);
+    double probability = exp(-beta_J * cost);
     if(cost < 0){
       s *= -1;
     }
@@ -109,9 +110,8 @@ std::vector<std::vector<int> > mcmc(vector<vector<int > > field , double beta){
     }
     field[x][y] = s;
   }
-  return field;
 }
-vector<vector<int > > coarse_grain(vector<vector<int > > field ){
+vector<vector<int > > coarse_grain(vector<vector<int > > &field ){
         vector<vector <int > > ret;
         vector<int> temp;
         int N = field.size();
@@ -129,7 +129,6 @@ vector<vector<int > > coarse_grain(vector<vector<int > > field ){
             for (int i=m*3;i<m*3+3;i++){
 
                 for (int j = n*3;j <n*3+3;j++){
-                    cout << "i: "<< i << " j: "<< j << "\n";
                     if(field[i][j] == 1){
                         up++;
                         }
@@ -150,62 +149,27 @@ vector<vector<int > > coarse_grain(vector<vector<int > > field ){
     }
             return ret;
     }
-
-//////////////////////////////////////
-/////////////////////////////////////
-/////////////////////////////////////
-//////////////////////////////////////
-/////////////////////////////////////
-/////////////////////////////////////
-//////////////////////////////////////
-/////////////////////////////////////
-/////////////////////////////////////
-//////////////////////////////////////
-/////////////////////////////////////
-/////////////////////////////////////
-
-
-int main(){
-  const int N = 27;
-  const double beta = 100.0;
+void main_func(vector<vector<int > > &field,double beta_J){
+  int N = field.size();
+  double beta = beta_J;
   vector<double> EnergyList;
   std::vector<double> MagList;
-  std::map<std::string,int> dict;
-  std::map<std::string,int>:: iterator it;
   std::random_device rd;
   std::mt19937 mt(rd());
-  vector<vector<int > > field = randomFieldGenerator(N);
   int count = 0;
-  for (int i = 0 ;i<100;i++){
-    field = mcmc(field,beta);
-  }
-  for(int sweep = 0; sweep < 10000; sweep++){
-    count++;
-    for (int i = 0; i < N*N ;i++){
-      int x = rand()%N;
-      int y = rand()%N;
-      int s = field[x][y];
-      std::uniform_real_distribution<double> dist(0.0, 1.0);
-      double u = dist(mt);
-      double cost = deltaE(field,x,y);
-      double probability = exp(-beta * cost);
-      if(cost < 0){
-        s *= -1;
-      }
-      else if (u <= probability){
-        s *= -1;
-      }
-      field[x][y] = s;
-    }
-  //sample field mapping
-  if(count > 100){
-    double e_curr = calcEnergy(field,N,N);
-    double m_curr = calcMag(field);
-    EnergyList.push_back(e_curr);
-    MagList.push_back(m_curr);
-}
+  string folder  = to_string(N);
   ofstream file;
-  string fileName = ("27x27MCMC/beta=" + to_string(floorf(beta*100)/100) + ".txt");
+  string fileName = ("SPIN_CONFIG/"+folder+"/beta_J=" + to_string(floorf(beta*100)/100) + ".txt");
+  for (int sweep = 0; sweep < 10000; sweep++){
+    count++;
+    mcmc(field,beta);
+    if(count > 100){
+      double e_curr = calcEnergy(field,N,N);
+      double m_curr = calcMag(field);
+      EnergyList.push_back(e_curr);
+      MagList.push_back(m_curr);
+    }
+  }
   file.open(fileName);
   while(file.is_open()){
     for(int i = 0; i < EnergyList.size();i++){
@@ -224,8 +188,44 @@ int main(){
       }
     }
     file.close();
-  }
+}
 
 }
+//////////////////////////////////////
+/////////////////////////////////////
+/////////////////////////////////////
+//////////////////////////////////////
+/////////////////////////////////////
+/////////////////////////////////////
+//////////////////////////////////////
+/////////////////////////////////////
+/////////////////////////////////////
+//////////////////////////////////////
+/////////////////////////////////////
+/////////////////////////////////////
+
+
+int main(){
+  int N = 81;
+  vector<double> beta_J = {0.0,0.3,0.4,0.5,0.6,100};
+  vector<vector<int > > field = randomFieldGenerator(N);
+  vector<vector<int > > first_grained = coarse_grain(field);
+  vector<vector<int > > second_grained = coarse_grain(first_grained);
+  for (int i = 0;i<beta_J.size();i++){
+    thread th1(main_func,ref(field),beta_J[i]);
+    thread th2(main_func,ref(first_grained),beta_J[i]);
+    thread th3(main_func,ref(second_grained),beta_J[i]);
+    th1.join();
+    th2.join();
+    th3.join();
+  }
+
+
+
+
+
+
+  //Writing file
+
 return 0;
 }
