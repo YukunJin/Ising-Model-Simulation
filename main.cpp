@@ -149,17 +149,15 @@ vector<vector<int > > coarse_grain(vector<vector<int > > &field ){
     }
             return ret;
     }
-void main_func(vector<vector<int > > &field,double beta_J){
+void main_func(vector<vector<int > > &field,double beta_J,string url){
   int N = field.size();
   double beta = beta_J;
   vector<double> EnergyList;
   std::vector<double> MagList;
-  std::random_device rd;
-  std::mt19937 mt(rd());
   int count = 0;
   string folder  = to_string(N);
   ofstream file;
-  string fileName = ("SPIN_CONFIG/"+folder+"/beta_J=" + to_string(floorf(beta*100)/100) + ".txt");
+  string fileName = (url+"/beta_J=" + to_string(floorf(beta*100)/100) + ".txt");
   for (int sweep = 0; sweep < 10000; sweep++){
     count++;
     mcmc(field,beta);
@@ -178,7 +176,44 @@ void main_func(vector<vector<int > > &field,double beta_J){
     }
 
     for(int i = 0; i<MagList.size();i++){
-      file << "M "<<MagList[i];
+      file << "M "<< MagList[i];
+      file << '\n';
+    }
+    for(int i=0;i<field.size();i++){
+      for (int j=0;j<field.size();j++){
+        file << "S " << field[i][j];
+        file << '\n';
+      }
+    }
+    file.close();
+}
+}
+
+void main_func_cg(std::vector<std::vector<int> > &field, double beta_J, string url){
+  int C = field.size();
+  vector<double> EnergyList_cg;
+  std::vector<double> MagList_cg;
+  ofstream file;
+  string fileName = (url+"/beta_J=" + to_string(floorf(beta_J*100)/100) + ".txt");
+  for (int sweep = 0; sweep<10000;sweep++){
+      mcmc(field,beta_J);
+      if(sweep > 100){
+        std::vector<std::vector<int> > cg_field = coarse_grain(field);
+        double e_curr = calcEnergy(cg_field,C/3,C/3);
+        double m_curr = calcMag(cg_field);
+        EnergyList_cg.push_back(e_curr);
+        MagList_cg.push_back(m_curr);
+      }
+  }
+  file.open(fileName);
+  while(file.is_open()){
+    for(int i = 0; i < EnergyList_cg.size();i++){
+      file << "E "<< EnergyList_cg[i];
+      file << '\n';
+    }
+
+    for(int i = 0; i<MagList_cg.size();i++){
+      file << "M "<< MagList_cg[i];
       file << '\n';
     }
     for(int i=0;i<field.size();i++){
@@ -191,6 +226,23 @@ void main_func(vector<vector<int > > &field,double beta_J){
 }
 
 }
+
+void writeToFile(std::vector<std::vector<int> > field,double beta_J,string url){
+  ofstream file;
+
+  string folder = to_string(field.size());
+  string fileName = (url+"/"+folder+"/beta_J=" + to_string(floorf(beta_J*100)/100) + ".txt");
+  file.open(fileName);
+  for(int i=0;i<field.size();i++){
+    for (int j=0;j<field.size();j++){
+      file << "S " << field[i][j];
+      file << '\n';
+    }
+  }
+  file.close();
+}
+
+
 //////////////////////////////////////
 /////////////////////////////////////
 /////////////////////////////////////
@@ -206,26 +258,23 @@ void main_func(vector<vector<int > > &field,double beta_J){
 
 
 int main(){
-  int N = 81;
+  int N = 27;
+  int C = 81;
   vector<double> beta_J = {0.0,0.3,0.4,0.5,0.6,100};
-  vector<vector<int > > field = randomFieldGenerator(N);
-  vector<vector<int > > first_grained = coarse_grain(field);
-  vector<vector<int > > second_grained = coarse_grain(first_grained);
+  std::vector<std::vector<int> > native_field = randomFieldGenerator(N);
+  std::vector<std::vector<int> > large_field;
+  string url_native = "RENORMALIZED/native_field";
+  string url_cg = "RENORMALIZED/cg_field";
   for (int i = 0;i<beta_J.size();i++){
-    thread th1(main_func,ref(field),beta_J[i]);
-    thread th2(main_func,ref(first_grained),beta_J[i]);
-    thread th3(main_func,ref(second_grained),beta_J[i]);
-    th1.join();
-    th2.join();
-    th3.join();
-  }
-
-
-
-
-
-
-  //Writing file
-
+     native_field = randomFieldGenerator(N);
+     main_func(native_field,beta_J[i],url_native);
+     //large_field = randomFieldGenerator(C);
+    //thread th1(main_func,ref(native_field),beta_J[i],url_native);
+    //thread th2(main_func_cg,ref(large_field),beta_J[i],url_cg);
+    //th1.join();
+    //th2.join();
+    native_field.clear();
+    //large_field.clear();
+}
 return 0;
 }
